@@ -147,6 +147,18 @@ module Cupertino
         profiles
       end
 
+      def add_profile(profile)
+        url = "https://developer.apple.com/ios/manage/provisioningprofiles/create.action"
+
+        type_param = (profile.type == :distribution) ? 2 : 1
+        get(url, {:type => type_param})
+        if form = page.form_with(:name => 'save')
+          form.fields.each { |f| puts f.name }
+          form.field_with(:id => 'provisioningProfileName').value = profile.name
+        end
+
+      end
+
       def download_profile(profile)
         list_profiles(profile.type)
 
