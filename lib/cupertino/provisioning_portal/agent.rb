@@ -150,11 +150,63 @@ module Cupertino
       def add_profile(profile)
         url = "https://developer.apple.com/ios/manage/provisioningprofiles/create.action"
 
-        type_param = (profile.type == :distribution) ? 2 : 1
+        type_param = (profile.type == :development) ? 1 : 2
         get(url, {:type => type_param})
         if form = page.form_with(:name => 'save')
           form.fields.each { |f| puts f.name }
-          form.field_with(:id => 'provisioningProfileName').value = profile.name
+          form.field_with(:name => 'provisioningProfileName').value = profile.name
+          app_ids = form.field_with(:name => 'cfBundleDisplayId').options
+
+          app_id = yield app_ids
+
+          form.field_with(:name => 'cfBundleDisplayId').option_with(:value => app_id.value).click
+
+          if profile.type == :development
+            on, off = [], []
+            page.parser.css('.checkboxlist.last td').each do |td|
+              checkbox = td.at_xpath('input[@type="checkbox"]')
+
+              device = Device.new
+              device.name = td.at_xpath('label/text()').to_s.strip rescue nil
+              device.udid = checkbox['value'].to_s.strip rescue nil
+
+              if checkbox['checked']
+                on << device
+              else
+                off << device
+              end
+            end
+            form.checkboxes_with(:name => 'selectedCertificates').first.check
+            lines = ["# Comment / Uncomment Devices to Turn Off / On for Provisioning Profile"]
+            lines += on.collect{|device| "#{device}"}
+            lines += off.collect{|device| "# #{device}"}
+            result = ask_editor lines.join("\n")
+
+            devices = []
+            result.split(/\n+/).each do |line|
+              next if /^\#/ === line
+              components = line.split(/\s+/)
+              device = Device.new
+              device.udid = components.pop
+              device.name = components.join(" ")
+              devices << device
+            end
+
+            form = page.form_with(:name => 'save')
+            form.checkboxes_with(:name => "selectedDevices").each do |checkbox|
+              checkbox.check
+              if devices.detect{|device| device.udid == checkbox['value']}
+                checkbox.check
+              else
+                checkbox.uncheck
+              end
+            end
+          else
+            form.radiobutton_with(:id => 'save_distributionMethodstore').check
+          end
+
+          button = form.button_with(:name => 'submit')
+          form.click_button(button)
         end
 
       end

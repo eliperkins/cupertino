@@ -31,28 +31,33 @@ end
 alias_command :profiles, :'profiles:list'
 
 command :'profiles:add' do |c|
-  c.syntax = 'ios profiles:add [options] NAME'
+  c.syntax = 'ios profiles:add NAME [development|distribution]'
   c.summary = 'Add/Create a provisioning profile'
   c.description = ''
-
-  c.option '-t', '--type TYPE', 'Type of provisioning profile, development or distribution'
-  c.option '-a', '--appId APP_ID', 'App ID for provisioning profile'
 
   c.action do |args, options|
     name = args.first
     say_error "No profile name specified" and abort if args.nil? or args.empty? or name.nil?
 
-    type = options.type || 'development'
-    say_error "No type specified" and abort if type.nil?
-
-    app_id = options.appId
-    say_error "No type specified" and abort if app_id.nil?
+    type = args[1].nil? ? :development : args[1].downcase.to_sym
 
     profile = ProvisioningProfile.new
     profile.type = type
     profile.name = name
-    profile.app_id = app_id
-    agent.add_profile(profile)
+
+    agent.add_profile(profile) do |app_ids|
+      lines = ["# Uncomment your app ID"]
+      lines += app_ids.collect{|app_id| "# #{app_id.text}"}
+      result = ask_editor lines.join("\n")
+
+      app_id = nil
+      result.split(/\n+/).each do |line|
+        next if /^\#/ === line
+        app_id = app_ids.find{|a| a.text == line.strip}
+      end
+
+      app_id
+    end
 
     say_ok "Successfully added profile"
   end
